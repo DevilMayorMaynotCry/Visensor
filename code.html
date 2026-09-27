@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Annotated Firmware — Proximity Alert Wearable</title>
+<meta name="description" content="A section-by-section walkthrough of the real Arduino sketch behind the proximity alert wearable, connecting each part of the code to the wiring diagram and the four-zone beep pattern.">
+<meta name="theme-color" content="#1B4D3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body id="top">
+
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v12"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+  </symbol>
+  <symbol id="icon-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="2"/>
+    <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" stroke="none"/>
+    <path d="M21 16l-5.5-5.5a2 2 0 0 0-2.8 0L4 19"/>
+  </symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+  </symbol>
+  <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>
+  </symbol>
+</svg>
+
+<header class="nav">
+  <a class="nav__brand" href="index.html#top">Proximity Alert Wearable</a>
+
+  <nav id="nav-links" class="nav__links">
+    <a href="index.html#components">Components</a>
+    <a href="index.html#how-it-works">How It Works</a>
+    <a href="index.html">Home</a>
+  </nav>
+
+  <button class="nav__menu-toggle" id="nav-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="nav-links">
+    <svg class="icon-menu" aria-hidden="true"><use href="#icon-menu"></use></svg>
+    <svg class="icon-x" aria-hidden="true"><use href="#icon-x"></use></svg>
+  </button>
+</header>
+
+<main id="main-content">
+  <section class="section code-hero">
+    <div class="container container--narrow">
+      <h1 class="section-title">Reading the firmware</h1>
+      <p class="section-lead">This is the exact Arduino sketch running on the device — the same code, broken into 18 short sections with plain-language notes tying each part back to the wiring diagram and the four alert zones described on the home page.</p>
+      <div class="btn-row">
+        <a class="btn btn--primary" href="firmware.ino" download>
+          <svg aria-hidden="true"><use href="#icon-download"></use></svg>
+          Download firmware.ino
+        </a>
+        <a class="btn btn--ghost" href="index.html#hero">
+          <svg aria-hidden="true"><use href="#icon-image"></use></svg>
+          View wiring diagram
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section code-walkthrough">
+    <div class="container container--narrow">
+
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">1. What this file is</h3>
+        <p class="code-block-group__desc">This is the exact sketch running on the Arduino Nano. The header notes it's the second of two sketches: a separate one-time setup sketch has to be run first to reconfigure both TF-Luna sensors to 9600 baud, since that's the speed this sketch expects them to already be talking at. You'll notice the sketch's own comments and debug messages refer to the project internally as &quot;VIsensor&quot; — that's simply the working codename inside the source file itself, shown here exactly as written.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span></pre></div></td><td class="code"><div><pre><span></span><span class="cm">/*</span>
+<span class="cm">  ============================================================</span>
+<span class="cm">  VIsensor - FINAL Production Sketch (Zone-Based Beep Pattern)</span>
+<span class="cm">  Dual TF-Luna obstacle detection with left/right buzzers</span>
+<span class="cm">  for a wearable obstacle-warning device</span>
+<span class="cm">  ============================================================</span>
+
+<span class="cm">  REQUIRES: both TF-Luna sensors already reconfigured to 9600</span>
+<span class="cm">  baud - run VIsensor_Step1_OneTime_BaudSetup.ino ONCE first,</span>
+<span class="cm">  if you haven&#39;t already.</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">2. The beep pattern, in the code's own words</h3>
+        <p class="code-block-group__desc">Before any code runs, the sketch documents the same four zones described elsewhere on this site — FAR, MID, NEAR, and CLOSE — plus what happens beyond 8m or with no reading at all. This comment is the spec the rest of the sketch is built to match exactly.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">  </span><span class="o">------------------------------------------------------------</span>
+<span class="w">  </span><span class="n">BEEP</span><span class="w"> </span><span class="n">PATTERN</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">per</span><span class="w"> </span><span class="n">client</span><span class="err">&#39;</span><span class="n">s</span><span class="w"> </span><span class="n">latest</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="p">(</span><span class="mi">4</span><span class="w"> </span><span class="n">distance</span><span class="w"> </span><span class="n">zones</span><span class="p">,</span>
+<span class="w">  </span><span class="n">matching</span><span class="w"> </span><span class="n">their</span><span class="w"> </span><span class="n">thesis</span><span class="w"> </span><span class="n">test</span><span class="w"> </span><span class="n">points</span><span class="w"> </span><span class="n">of</span><span class="w"> </span><span class="mi">2</span><span class="n">m</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">4</span><span class="n">m</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">6</span><span class="n">m</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="n">m</span><span class="p">)</span><span class="o">:</span>
+<span class="w">  </span><span class="o">------------------------------------------------------------</span>
+<span class="w">    </span><span class="o">~</span><span class="mi">7-8</span><span class="n">m</span><span class="w">  </span><span class="p">(</span><span class="n">FAR</span><span class="p">)</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">ONE</span><span class="w"> </span><span class="n">single</span><span class="w"> </span><span class="n">pulse</span><span class="p">,</span><span class="w"> </span><span class="n">then</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">pause</span><span class="p">,</span>
+<span class="w">                     </span><span class="n">repeating</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">sparse</span><span class="w"> </span><span class="s">&quot;ping&quot;</span><span class="w"> </span><span class="n">warning</span><span class="w"> </span><span class="n">that</span>
+<span class="w">                     </span><span class="n">something</span><span class="w"> </span><span class="n">is</span><span class="w"> </span><span class="n">there</span><span class="p">.</span><span class="w"> </span><span class="n">Side</span><span class="o">-</span><span class="n">specific</span><span class="w"> </span><span class="p">(</span><span class="n">only</span>
+<span class="w">                     </span><span class="n">the</span><span class="w"> </span><span class="n">side</span><span class="w"> </span><span class="n">that</span><span class="w"> </span><span class="n">detected</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="n">beeps</span><span class="p">).</span>
+<span class="w">    </span><span class="o">~</span><span class="mi">5-7</span><span class="n">m</span><span class="w">  </span><span class="p">(</span><span class="n">MID</span><span class="p">)</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">burst</span><span class="w"> </span><span class="n">of</span><span class="w"> </span><span class="n">exactly</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">beeps</span><span class="w"> </span><span class="n">at</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">moderate</span><span class="p">,</span>
+<span class="w">                     </span><span class="s">&quot;not too fast&quot;</span><span class="w"> </span><span class="n">pace</span><span class="p">,</span><span class="w"> </span><span class="n">then</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">pause</span><span class="w"> </span><span class="n">before</span>
+<span class="w">                     </span><span class="n">the</span><span class="w"> </span><span class="n">burst</span><span class="w"> </span><span class="n">repeats</span><span class="p">.</span><span class="w"> </span><span class="n">Side</span><span class="o">-</span><span class="n">specific</span><span class="p">.</span>
+<span class="w">    </span><span class="o">~</span><span class="mi">3-5</span><span class="n">m</span><span class="w">  </span><span class="p">(</span><span class="n">NEAR</span><span class="p">)</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">continuous</span><span class="w"> </span><span class="n">beeping</span><span class="w"> </span><span class="n">that</span><span class="w"> </span><span class="n">smoothly</span><span class="w"> </span><span class="n">speeds</span>
+<span class="w">                     </span><span class="n">up</span><span class="w"> </span><span class="n">as</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">object</span><span class="w"> </span><span class="n">gets</span><span class="w"> </span><span class="n">closer</span><span class="w"> </span><span class="p">(</span><span class="n">from</span><span class="w"> </span><span class="n">the</span>
+<span class="w">                     </span><span class="n">MID</span><span class="w"> </span><span class="n">zone</span><span class="err">&#39;</span><span class="n">s</span><span class="w"> </span><span class="n">pace</span><span class="w"> </span><span class="n">down</span><span class="w"> </span><span class="n">toward</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">CLOSE</span>
+<span class="w">                     </span><span class="n">zone</span><span class="err">&#39;</span><span class="n">s</span><span class="w"> </span><span class="n">pace</span><span class="p">).</span><span class="w"> </span><span class="n">Side</span><span class="o">-</span><span class="n">specific</span><span class="p">.</span>
+<span class="w">    </span><span class="o">&lt;=</span><span class="mi">3</span><span class="n">m</span><span class="w">   </span><span class="p">(</span><span class="n">CLOSE</span><span class="p">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">very</span><span class="w"> </span><span class="n">fast</span><span class="w"> </span><span class="n">continuous</span><span class="w"> </span><span class="n">beeping</span><span class="p">.</span><span class="w"> </span><span class="n">BOTH</span>
+<span class="w">                     </span><span class="n">buzzers</span><span class="w"> </span><span class="n">sound</span><span class="w"> </span><span class="n">together</span><span class="w"> </span><span class="n">here</span><span class="p">,</span><span class="w"> </span><span class="n">even</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">only</span>
+<span class="w">                     </span><span class="n">ONE</span><span class="w"> </span><span class="n">side</span><span class="err">&#39;</span><span class="n">s</span><span class="w"> </span><span class="n">sensor</span><span class="w"> </span><span class="n">is</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">one</span><span class="w"> </span><span class="n">detecting</span><span class="w"> </span><span class="n">the</span>
+<span class="w">                     </span><span class="n">close</span><span class="w"> </span><span class="n">object</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">at</span><span class="w"> </span><span class="k">this</span><span class="w"> </span><span class="n">range</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">client</span>
+<span class="w">                     </span><span class="n">wants</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">full</span><span class="w"> </span><span class="n">alert</span><span class="w"> </span><span class="n">rather</span><span class="w"> </span><span class="n">than</span><span class="w"> </span><span class="n">a</span>
+<span class="w">                     </span><span class="n">side</span><span class="o">-</span><span class="n">specific</span><span class="w"> </span><span class="n">one</span><span class="p">.</span>
+<span class="w">    </span><span class="o">&gt;</span><span class="mi">8</span><span class="n">m</span><span class="w"> </span><span class="k">or</span><span class="w"> </span><span class="n">no</span><span class="w"> </span><span class="n">valid</span><span class="w"> </span><span class="n">reading</span><span class="o">:</span><span class="w"> </span><span class="n">silent</span><span class="p">.</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">3. Two decisions the author flagged for the client</h3>
+        <p class="code-block-group__desc">The client gave four reference distances (2/4/6/8m) but not the exact edges between zones, so the code splits the difference — placing the boundaries at the midpoints: 3m, 5m, and 7m. It also spells out exactly how “both buzzers together” works at close range: if either sensor detects something within the CLOSE zone, both buzzers switch to the fast CLOSE pattern, even if the other sensor itself isn't reading anything close. Both are written as single, easy-to-move constants in case testing shows they need adjusting.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">  </span><span class="n">ASSUMPTION</span><span class="w"> </span><span class="n">FLAGGED</span><span class="w"> </span><span class="err">#</span><span class="mi">1</span><span class="o">:</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="n">gave</span><span class="w"> </span><span class="mi">4</span><span class="w"> </span><span class="n">reference</span><span class="w"> </span><span class="n">distances</span>
+<span class="w">  </span><span class="p">(</span><span class="mi">2</span><span class="o">/</span><span class="mi">4</span><span class="o">/</span><span class="mi">6</span><span class="o">/</span><span class="mi">8</span><span class="n">m</span><span class="p">)</span><span class="w"> </span><span class="n">but</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="n">exact</span><span class="w"> </span><span class="n">zone</span><span class="w"> </span><span class="n">edges</span><span class="p">.</span><span class="w"> </span><span class="n">This</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="n">splits</span><span class="w"> </span><span class="n">zones</span>
+<span class="w">  </span><span class="n">at</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">midpoint</span><span class="w"> </span><span class="n">between</span><span class="w"> </span><span class="n">each</span><span class="w"> </span><span class="n">pair</span><span class="w"> </span><span class="p">(</span><span class="mi">7</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="n">m</span><span class="p">).</span><span class="w"> </span><span class="n">If</span><span class="w"> </span><span class="n">testing</span>
+<span class="w">  </span><span class="n">shows</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">transition</span><span class="w"> </span><span class="n">feels</span><span class="w"> </span><span class="n">off</span><span class="p">,</span><span class="w"> </span><span class="n">these</span><span class="w"> </span><span class="n">are</span><span class="w"> </span><span class="n">single</span><span class="w"> </span><span class="n">constants</span><span class="w"> </span><span class="n">to</span>
+<span class="w">  </span><span class="n">move</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">see</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">ZONE_</span><span class="p">...</span><span class="n">_MAX_CM</span><span class="w"> </span><span class="n">block</span><span class="w"> </span><span class="n">below</span><span class="p">.</span>
+
+<span class="w">  </span><span class="n">ASSUMPTION</span><span class="w"> </span><span class="n">FLAGGED</span><span class="w"> </span><span class="err">#</span><span class="mi">2</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;both left and right warning&quot;</span><span class="w"> </span><span class="n">at</span><span class="w"> </span><span class="mi">2</span><span class="n">m</span>
+<span class="w">  </span><span class="n">is</span><span class="w"> </span><span class="n">implemented</span><span class="w"> </span><span class="n">as</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">EITHER</span><span class="w"> </span><span class="n">sensor</span><span class="w"> </span><span class="n">detects</span><span class="w"> </span><span class="n">something</span>
+<span class="w">  </span><span class="n">within</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">CLOSE</span><span class="w"> </span><span class="n">zone</span><span class="p">,</span><span class="w"> </span><span class="n">BOTH</span><span class="w"> </span><span class="n">buzzers</span><span class="w"> </span><span class="k">switch</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">fast</span><span class="w"> </span><span class="n">CLOSE</span>
+<span class="w">  </span><span class="n">pattern</span><span class="p">,</span><span class="w"> </span><span class="n">regardless</span><span class="w"> </span><span class="n">of</span><span class="w"> </span><span class="n">what</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">other</span><span class="w"> </span><span class="n">sensor</span><span class="w"> </span><span class="n">itself</span><span class="w"> </span><span class="n">reads</span><span class="p">.</span>
+<span class="w">  </span><span class="n">If</span><span class="w"> </span><span class="n">instead</span><span class="w"> </span><span class="n">you</span><span class="w"> </span><span class="n">only</span><span class="w"> </span><span class="n">want</span><span class="w"> </span><span class="n">both</span><span class="w"> </span><span class="n">buzzing</span><span class="w"> </span><span class="n">when</span><span class="w"> </span><span class="n">BOTH</span><span class="w"> </span><span class="n">sensors</span>
+<span class="w">  </span><span class="n">independently</span><span class="w"> </span><span class="n">detect</span><span class="w"> </span><span class="n">something</span><span class="w"> </span><span class="n">close</span><span class="p">,</span><span class="w"> </span><span class="n">say</span><span class="w"> </span><span class="n">so</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">it</span><span class="err">&#39;</span><span class="n">s</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">small</span>
+<span class="w">  </span><span class="n">change</span><span class="w"> </span><span class="n">in</span><span class="w"> </span><span class="n">updateBuzzerZone</span><span class="p">()</span><span class="err">&#39;</span><span class="n">s</span><span class="w"> </span><span class="n">otherSideClose</span><span class="w"> </span><span class="n">logic</span><span class="p">.</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">4. Why digitalWrite() instead of tone()</h3>
+        <p class="code-block-group__desc">Arduino's built-in tone() function can only drive one pin at a time on this chip — calling it for a second buzzer would silently cut off the first. Since the CLOSE zone needs both buzzers sounding at once, the sketch pulses each buzzer pin on and off manually with digitalWrite() instead, which has no such limit. That only works because both buzzers are active buzzers (they sound as soon as they're powered), matching the hardware on this site. The last line is a reminder to double-check pin numbers against the physical build — left buzzer on D4, right buzzer on D5, exactly as wired in the diagram above.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">  </span><span class="n">WHY</span><span class="w"> </span><span class="n">digitalWrite</span><span class="p">()</span><span class="w"> </span><span class="n">FOR</span><span class="w"> </span><span class="n">THE</span><span class="w"> </span><span class="n">BUZZERS</span><span class="p">,</span><span class="w"> </span><span class="n">NOT</span><span class="w"> </span><span class="n">tone</span><span class="p">()</span><span class="o">:</span>
+<span class="w">  </span><span class="n">The</span><span class="w"> </span><span class="n">stock</span><span class="w"> </span><span class="n">Arduino</span><span class="w"> </span><span class="n">tone</span><span class="p">()</span><span class="w"> </span><span class="n">function</span><span class="w"> </span><span class="n">can</span><span class="w"> </span><span class="n">only</span><span class="w"> </span><span class="n">drive</span><span class="w"> </span><span class="n">ONE</span><span class="w"> </span><span class="n">pin</span><span class="w"> </span><span class="n">at</span><span class="w"> </span><span class="n">a</span>
+<span class="w">  </span><span class="n">time</span><span class="w"> </span><span class="n">on</span><span class="w"> </span><span class="n">an</span><span class="w"> </span><span class="n">ATmega328</span><span class="w"> </span><span class="p">(</span><span class="n">Uno</span><span class="o">/</span><span class="n">Nano</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">calling</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="n">on</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">second</span><span class="w"> </span><span class="n">pin</span>
+<span class="w">  </span><span class="n">silently</span><span class="w"> </span><span class="n">cuts</span><span class="w"> </span><span class="n">off</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">first</span><span class="p">.</span><span class="w"> </span><span class="n">Since</span><span class="w"> </span><span class="n">both</span><span class="w"> </span><span class="n">buzzers</span><span class="w"> </span><span class="n">need</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">be</span>
+<span class="w">  </span><span class="n">able</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">sound</span><span class="w"> </span><span class="n">together</span><span class="w"> </span><span class="p">(</span><span class="n">CLOSE</span><span class="w"> </span><span class="n">zone</span><span class="p">),</span><span class="w"> </span><span class="k">this</span><span class="w"> </span><span class="n">sketch</span><span class="w"> </span><span class="n">pulses</span><span class="w"> </span><span class="n">each</span>
+<span class="w">  </span><span class="n">buzzer</span><span class="w"> </span><span class="n">pin</span><span class="w"> </span><span class="n">independently</span><span class="w"> </span><span class="n">with</span><span class="w"> </span><span class="n">digitalWrite</span><span class="p">(),</span><span class="w"> </span><span class="n">which</span><span class="w"> </span><span class="n">has</span><span class="w"> </span><span class="n">no</span>
+<span class="w">  </span><span class="n">such</span><span class="w"> </span><span class="n">limitation</span><span class="p">.</span><span class="w"> </span><span class="n">This</span><span class="w"> </span><span class="n">assumes</span><span class="w"> </span><span class="n">ACTIVE</span><span class="w"> </span><span class="n">buzzers</span><span class="w"> </span><span class="p">(</span><span class="n">they</span><span class="w"> </span><span class="n">sound</span><span class="w"> </span><span class="n">as</span>
+<span class="w">  </span><span class="n">soon</span><span class="w"> </span><span class="n">as</span><span class="w"> </span><span class="n">they</span><span class="w"> </span><span class="n">get</span><span class="w"> </span><span class="n">power</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">say</span><span class="w"> </span><span class="n">so</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">yours</span><span class="w"> </span><span class="n">are</span><span class="w"> </span><span class="n">passive</span><span class="w"> </span><span class="n">piezo</span>
+<span class="w">  </span><span class="n">buzzers</span><span class="w"> </span><span class="n">instead</span><span class="p">,</span><span class="w"> </span><span class="n">since</span><span class="w"> </span><span class="n">that</span><span class="w"> </span><span class="n">needs</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">different</span><span class="w"> </span><span class="n">approach</span><span class="p">.</span>
+
+<span class="w">  </span><span class="n">PIN</span><span class="w"> </span><span class="n">NOTE</span><span class="o">:</span><span class="w"> </span><span class="n">Left</span><span class="w"> </span><span class="n">buzzer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">D4</span><span class="p">,</span><span class="w"> </span><span class="n">Right</span><span class="w"> </span><span class="n">buzzer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">D5</span><span class="p">,</span><span class="w"> </span><span class="n">per</span><span class="w"> </span><span class="n">your</span><span class="w"> </span><span class="n">most</span>
+<span class="w">  </span><span class="n">recent</span><span class="w"> </span><span class="n">wiring</span><span class="w"> </span><span class="n">list</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">check</span><span class="w"> </span><span class="n">against</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">physical</span><span class="w"> </span><span class="n">device</span><span class="p">.</span>
+<span class="w">  </span><span class="o">============================================================</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">5. Pin assignments — the code's version of the wiring diagram</h3>
+        <p class="code-block-group__desc">SoftwareSerial lets the Arduino talk to a serial device on any two pins, since the Nano's one built-in hardware serial port is already used for the USB/debug connection in setup() below. Each TF-Luna gets its own SoftwareSerial object, and the pin numbers match the diagram exactly: the left sensor's RX/TX are D2 and D3, the right sensor's are D6 and D7, the left buzzer is D4, and the right buzzer is D5.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span></pre></div></td><td class="code"><div><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;SoftwareSerial.h&gt;</span>
+
+<span class="c1">// ---------------- PIN ASSIGNMENTS ----------------</span>
+<span class="n">SoftwareSerial</span><span class="w"> </span><span class="nf">leftSensor</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span><span class="w">   </span><span class="c1">// Left TF-Luna:  RX=D2, TX=D3</span>
+<span class="n">SoftwareSerial</span><span class="w"> </span><span class="nf">rightSensor</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">);</span><span class="w">  </span><span class="c1">// Right TF-Luna: RX=D6, TX=D7</span>
+
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">leftBuzzer</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">rightBuzzer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">6. Turning the beep-pattern spec into numbers</h3>
+        <p class="code-block-group__desc">SENSOR_BAUD confirms the 9600 baud rate both sensors must already be set to. STALE_TIMEOUT_MS is a small safety net: if a sensor stops giving valid readings for less than 400ms, the code treats it as a brief hiccup rather than instantly going silent (more on that in section 11). The four ZONE_..._MAX_CM constants are the exact numeric boundaries from section 2 — 300cm, 500cm, 700cm, and 800cm — turning “3m / 5m / 7m / 8m” into the centimeter values classifyZone() actually compares against.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span></pre></div></td><td class="code"><div><pre><span></span><span class="c1">// ---------------- SENSOR SETTINGS ----------------</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">SENSOR_BAUD</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">9600</span><span class="p">;</span><span class="w">      </span><span class="c1">// sensors must already be set to this</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">STALE_TIMEOUT_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">400</span><span class="p">;</span><span class="w">  </span><span class="c1">// if a sensor gives no valid reading</span>
+<span class="w">                                              </span><span class="c1">// for this long, its zone clears to</span>
+<span class="w">                                              </span><span class="c1">// NONE instead of staying stuck</span>
+
+<span class="c1">// ---------------- ZONE BOUNDARIES (centimeters) ----------------</span>
+<span class="c1">// Edges sit at the midpoint between the client&#39;s 2/4/6/8m test points.</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">ZONE_CLOSE_MAX_CM</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">300</span><span class="p">;</span><span class="w">  </span><span class="c1">// &lt;=300cm   (&lt;=3m)   -&gt; CLOSE</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">ZONE_NEAR_MAX_CM</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">500</span><span class="p">;</span><span class="w">  </span><span class="c1">// 301-500cm (3-5m)   -&gt; NEAR</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">ZONE_MID_MAX_CM</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="mi">700</span><span class="p">;</span><span class="w">  </span><span class="c1">// 501-700cm (5-7m)   -&gt; MID</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">ZONE_FAR_MAX_CM</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="mi">800</span><span class="p">;</span><span class="w">  </span><span class="c1">// 701-800cm (7-8m)   -&gt; FAR</span>
+<span class="w">                                     </span><span class="c1">// &gt;800cm             -&gt; NONE (out of range)</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">7. The timing behind each zone's beep pattern</h3>
+        <p class="code-block-group__desc">Each zone's rhythm is just numbers of milliseconds. FAR is a short 60ms pulse followed by a long 1500ms pause. MID beeps for 70ms with 220ms gaps, repeated for a burst of exactly 5 beeps (MID_BURST_COUNT), then pauses 1200ms before the burst repeats. NEAR doesn't have one fixed gap — it defines the gap at each edge of the zone (220ms at 5m, matching MID's pace, down to 80ms at 3m, approaching CLOSE's pace) and interpolates between them, which is what produces the “smoothly speeds up” effect. CLOSE is the fastest and simplest: a 40ms pulse and a 40ms gap, repeating continuously.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span></pre></div></td><td class="code"><div><pre><span></span><span class="c1">// ---------------- BEEP TIMING PER ZONE ----------------</span>
+<span class="c1">// FAR: one sparse pulse, long pause, repeat</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">FAR_PULSE_ON_MS</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">FAR_PULSE_GAP_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1500</span><span class="p">;</span>
+
+<span class="c1">// MID: a burst of exactly 5 beeps at a moderate pace, then a pause</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">MID_BEEP_ON_MS</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="mi">70</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">MID_BEEP_GAP_MS</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="mi">220</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w">          </span><span class="n">MID_BURST_COUNT</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">MID_BURST_PAUSE_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1200</span><span class="p">;</span>
+
+<span class="c1">// NEAR: continuous beeping, speeding up from the MID pace to the CLOSE pace</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">NEAR_PULSE_ON_MS</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">50</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">NEAR_GAP_AT_5M_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">220</span><span class="p">;</span><span class="w">  </span><span class="c1">// matches MID&#39;s pace at the 5m edge</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">NEAR_GAP_AT_3M_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">80</span><span class="p">;</span><span class="w">   </span><span class="c1">// approaching CLOSE&#39;s pace at the 3m edge</span>
+
+<span class="c1">// CLOSE: very fast continuous beeping</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">CLOSE_PULSE_ON_MS</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">40</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">CLOSE_PULSE_GAP_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">40</span><span class="p">;</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">8. Turning a distance into a zone</h3>
+        <p class="code-block-group__desc">Zone is a small label for which of the four zones a reading falls into, plus ZONE_NONE for out of range. classifyZone() is a straightforward staircase: 0 or less isn't a real reading, so it's ZONE_NONE; up to 300cm is CLOSE; up to 500cm is NEAR; up to 700cm is MID; up to 800cm is FAR; anything beyond that falls through to ZONE_NONE, meaning silence.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span></pre></div></td><td class="code"><div><pre><span></span><span class="c1">// ---------------- ZONE STATE MACHINE ----------------</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">Zone</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ZONE_NONE</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_FAR</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_MID</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_NEAR</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_CLOSE</span><span class="w"> </span><span class="p">};</span>
+
+<span class="n">Zone</span><span class="w"> </span><span class="nf">classifyZone</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">distanceCm</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">distanceCm</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w">                 </span><span class="k">return</span><span class="w"> </span><span class="n">ZONE_NONE</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">distanceCm</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">ZONE_CLOSE_MAX_CM</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">ZONE_CLOSE</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">distanceCm</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">ZONE_NEAR_MAX_CM</span><span class="p">)</span><span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">ZONE_NEAR</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">distanceCm</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">ZONE_MID_MAX_CM</span><span class="p">)</span><span class="w">   </span><span class="k">return</span><span class="w"> </span><span class="n">ZONE_MID</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">distanceCm</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">ZONE_FAR_MAX_CM</span><span class="p">)</span><span class="w">   </span><span class="k">return</span><span class="w"> </span><span class="n">ZONE_FAR</span><span class="p">;</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">ZONE_NONE</span><span class="p">;</span><span class="w"> </span><span class="c1">// beyond 8m</span>
+<span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">9. One buzzer's memory</h3>
+        <p class="code-block-group__desc">Each buzzer has to remember its own state between loop() calls, since the beeping can't freeze the rest of the program while it happens. BuzzerChannel holds: which pin it drives, which zone it's in, whether it's mid-beep right now, when its next beep event is due, how many beeps it's done in the current MID burst, whether it's in the pause between MID bursts, and when it last saw a valid reading. left and right are two independent instances of this, one per buzzer. The comment just above updateBuzzerZone() is a workaround for an Arduino IDE quirk — not part of the logic itself.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span></pre></div></td><td class="code"><div><pre><span></span><span class="k">struct</span><span class="w"> </span><span class="nc">BuzzerChannel</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">pin</span><span class="p">;</span>
+<span class="w">  </span><span class="n">Zone</span><span class="w"> </span><span class="n">zone</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">bool</span><span class="w"> </span><span class="n">pulseOn</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">nextEventAt</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">burstBeepsDone</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">bool</span><span class="w"> </span><span class="n">inBurstPause</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">lastValidAt</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">BuzzerChannel</span><span class="w"> </span><span class="n">left</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">leftBuzzer</span><span class="p">,</span><span class="w">  </span><span class="n">ZONE_NONE</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">};</span>
+<span class="n">BuzzerChannel</span><span class="w"> </span><span class="n">right</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">rightBuzzer</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_NONE</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">};</span>
+
+<span class="c1">// Manual prototype - works around a known Arduino IDE bug where its</span>
+<span class="c1">// auto-generated function prototypes get inserted at the very top of the</span>
+<span class="c1">// file, before custom structs like BuzzerChannel are defined, causing a</span>
+<span class="c1">// &quot;was not declared in this scope&quot; error. This line fixes it.</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">updateBuzzerZone</span><span class="p">(</span><span class="n">BuzzerChannel</span><span class="w"> </span><span class="o">&amp;</span><span class="n">ch</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">distanceCm</span><span class="p">,</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">otherSideClose</span><span class="p">);</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">10. Reading one TF-Luna sensor</h3>
+        <p class="code-block-group__desc">Each TF-Luna streams its own 9-byte data frame roughly every 10ms. This function listens to one sensor, waits up to 25ms for a full frame (so a slow or missing frame can never freeze the rest of the program), then scans for the two-byte header (0x59, 0x59) marking where a frame starts. Once found, it reads the next 7 bytes and checks them against the sensor's own checksum — the same verification described elsewhere on this site. Only if that checksum matches does it trust the distance, packed into the first two of those bytes (low byte, then high byte, in centimeters). If nothing valid comes through, it returns -1. The last line drains any leftover bytes so the next call starts clean.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span></pre></div></td><td class="code"><div><pre><span></span><span class="c1">// ---------------- SENSOR FRAME READING ----------------</span>
+<span class="c1">// Adapted from Benewake&#39;s own official TFmini-Plus/TF-Luna Arduino routine</span>
+<span class="c1">// (same 9-byte frame + checksum format the TF-Luna uses), with a short</span>
+<span class="c1">// bounded wait so one bad or missing frame never stalls the loop.</span>
+<span class="kt">int</span><span class="w"> </span><span class="nf">readDistance</span><span class="p">(</span><span class="n">SoftwareSerial</span><span class="w"> </span><span class="o">&amp;</span><span class="n">sensor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">sensor</span><span class="p">.</span><span class="n">listen</span><span class="p">();</span>
+
+<span class="w">  </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">start</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">millis</span><span class="p">();</span>
+<span class="w">  </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">sensor</span><span class="p">.</span><span class="n">available</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">9</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">millis</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">25</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// wait briefly for a fresh 9-byte frame (sensor streams ~every 10ms)</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">-1</span><span class="p">;</span>
+
+<span class="w">  </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">sensor</span><span class="p">.</span><span class="n">available</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">9</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">sensor</span><span class="p">.</span><span class="n">read</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mh">0x59</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span><span class="w">   </span><span class="c1">// resync: scan until header byte 1 found</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">sensor</span><span class="p">.</span><span class="n">peek</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mh">0x59</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span><span class="w">   </span><span class="c1">// header byte 2 must follow immediately</span>
+<span class="w">    </span><span class="n">sensor</span><span class="p">.</span><span class="n">read</span><span class="p">();</span><span class="w">                          </span><span class="c1">// consume confirmed header byte 2</span>
+
+<span class="w">    </span><span class="kt">uint8_t</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="mi">7</span><span class="p">];</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">7</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sensor</span><span class="p">.</span><span class="n">read</span><span class="p">();</span>
+
+<span class="w">    </span><span class="kt">uint8_t</span><span class="w"> </span><span class="n">checksum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x59</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mh">0x59</span><span class="p">;</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">6</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="n">checksum</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">checksum</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="mi">6</span><span class="p">])</span><span class="w"> </span><span class="p">{</span><span class="w">               </span><span class="c1">// matches Benewake&#39;s documented checksum</span>
+<span class="w">      </span><span class="n">distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span><span class="w">    </span><span class="c1">// low byte + high byte, in cm</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">break</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">sensor</span><span class="p">.</span><span class="n">available</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="n">sensor</span><span class="p">.</span><span class="n">read</span><span class="p">();</span><span class="w">  </span><span class="c1">// drop leftovers before next call</span>
+
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">distance</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">11. Deciding which zone a buzzer should actually be in</h3>
+        <p class="code-block-group__desc">This runs once per buzzer, per loop(). First it classifies the raw distance into a zone. If that reading isn't valid, rather than instantly going silent, it holds the last confident zone for up to 400ms (STALE_TIMEOUT_MS) — the “brief hiccup” allowance from section 6. Then comes the cross-side escalation from section 3: if the OTHER sensor is in the CLOSE zone, this buzzer is forced into CLOSE too, regardless of what its own sensor reads — this line is the actual mechanism behind “both buzzers sound together” at close range. Whenever the zone changes, the pattern resets cleanly so a new zone always starts its rhythm from the beginning.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span></pre></div></td><td class="code"><div><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">updateBuzzerZone</span><span class="p">(</span><span class="n">BuzzerChannel</span><span class="w"> </span><span class="o">&amp;</span><span class="n">ch</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">distanceCm</span><span class="p">,</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">otherSideClose</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">millis</span><span class="p">();</span>
+
+<span class="w">  </span><span class="n">Zone</span><span class="w"> </span><span class="n">rawZone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">classifyZone</span><span class="p">(</span><span class="n">distanceCm</span><span class="p">);</span>
+
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">rawZone</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">ZONE_NONE</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">ch</span><span class="p">.</span><span class="n">lastValidAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">now</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ch</span><span class="p">.</span><span class="n">lastValidAt</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">STALE_TIMEOUT_MS</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">rawZone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ch</span><span class="p">.</span><span class="n">zone</span><span class="p">;</span><span class="w"> </span><span class="c1">// brief gap in valid data - hold the previous zone</span>
+<span class="w">  </span><span class="p">}</span><span class="w"> </span><span class="c1">// else: genuinely no reading for a while - stays ZONE_NONE</span>
+
+<span class="w">  </span><span class="c1">// &quot;Both left and right warn&quot; at the closest range: if the OTHER sensor</span>
+<span class="w">  </span><span class="c1">// is in the CLOSE zone, this buzzer escalates to CLOSE too, regardless</span>
+<span class="w">  </span><span class="c1">// of what this side&#39;s own sensor currently reads.</span>
+<span class="w">  </span><span class="n">Zone</span><span class="w"> </span><span class="n">effectiveZone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">otherSideClose</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">ZONE_CLOSE</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">rawZone</span><span class="p">;</span>
+
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">effectiveZone</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">ch</span><span class="p">.</span><span class="n">zone</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// entering a different zone - reset the pattern cleanly</span>
+<span class="w">    </span><span class="n">ch</span><span class="p">.</span><span class="n">zone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">effectiveZone</span><span class="p">;</span>
+<span class="w">    </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">    </span><span class="n">ch</span><span class="p">.</span><span class="n">burstBeepsDone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="n">ch</span><span class="p">.</span><span class="n">inBurstPause</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">    </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="p">;</span>
+<span class="w">    </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="w">  </span><span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">12. Staying silent, and pacing every beep</h3>
+        <p class="code-block-group__desc">If the zone is ZONE_NONE, the buzzer is switched off and the function returns early — the “beyond 8m or no valid reading: silent” rule. Otherwise, nextEventAt is checked against the current time; if it isn't time for the next beep event yet, the function simply returns. This is what makes the whole system non-blocking — no delay() calls anywhere — so both sensors keep getting read every loop no matter what stage of a beep pattern either buzzer is in.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">zone</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">ZONE_NONE</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span><span class="w"> </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">now</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// not time for the next beep event yet</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">13. FAR: one pulse, long pause</h3>
+        <p class="code-block-group__desc">Every time it's this buzzer's turn to act, it just flips: mid-pulse → turn off and schedule the long 1500ms gap; silent → turn on and schedule the short 60ms pulse. Back and forth, for as long as the zone stays FAR.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">  </span><span class="k">switch</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">zone</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="no">ZONE_FAR</span><span class="p">:</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">FAR_PULSE_GAP_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">FAR_PULSE_ON_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">      </span><span class="k">break</span><span class="p">;</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">14. MID: a burst of exactly 5 beeps, then a pause</h3>
+        <p class="code-block-group__desc">The same on/off flipping as FAR, but with a counter (burstBeepsDone) tracking how many beeps have happened. Once it reaches MID_BURST_COUNT (5), instead of beeping again it switches into a 1200ms pause, then resets the counter and starts a fresh burst of 5.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="no">ZONE_MID</span><span class="p">:</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">inBurstPause</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">inBurstPause</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">burstBeepsDone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">MID_BEEP_ON_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">burstBeepsDone</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">burstBeepsDone</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MID_BURST_COUNT</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="n">ch</span><span class="p">.</span><span class="n">inBurstPause</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="w">          </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">MID_BURST_PAUSE_MS</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">MID_BEEP_GAP_MS</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">MID_BEEP_ON_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">      </span><span class="k">break</span><span class="p">;</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">15. NEAR: beeping that actually speeds up</h3>
+        <p class="code-block-group__desc">This is where “smoothly speeds up as the object gets closer” actually happens. constrain() clamps the current distance to somewhere between the CLOSE and NEAR boundaries, and map() converts that clamped distance into a gap length, proportionally, between the two NEAR timing constants from section 7. A reading at the 5m edge uses the slower MID-matching gap; a reading at the 3m edge uses a gap nearly as fast as CLOSE; anything between scales smoothly. The pulse itself flips on and off exactly like FAR and MID, just with this distance-dependent gap.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="no">ZONE_NEAR</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kt">int</span><span class="w"> </span><span class="n">clamped</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">constrain</span><span class="p">(</span><span class="n">distanceCm</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_CLOSE_MAX_CM</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_NEAR_MAX_CM</span><span class="p">);</span>
+<span class="w">      </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">gap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">map</span><span class="p">(</span><span class="n">clamped</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_CLOSE_MAX_CM</span><span class="p">,</span><span class="w"> </span><span class="n">ZONE_NEAR_MAX_CM</span><span class="p">,</span><span class="w"> </span><span class="n">NEAR_GAP_AT_3M_MS</span><span class="p">,</span><span class="w"> </span><span class="n">NEAR_GAP_AT_5M_MS</span><span class="p">);</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">gap</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">NEAR_PULSE_ON_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">      </span><span class="k">break</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">16. CLOSE: as fast as the pattern gets</h3>
+        <p class="code-block-group__desc">The simplest case: the same on/off flip as the others, but with both the pulse and the gap fixed at 40ms — the fastest, most urgent pattern the device produces. Because of the escalation logic in section 11, this is the one pattern that can be triggered by the OTHER side's sensor, which is how both buzzers end up sounding together.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span></pre></div></td><td class="code"><div><pre><span></span><span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="no">ZONE_CLOSE</span><span class="p">:</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">CLOSE_PULSE_GAP_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">ch</span><span class="p">.</span><span class="n">pin</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">pulseOn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+<span class="w">        </span><span class="n">ch</span><span class="p">.</span><span class="n">nextEventAt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">CLOSE_PULSE_ON_MS</span><span class="p">;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">      </span><span class="k">break</span><span class="p">;</span>
+
+<span class="w">    </span><span class="k">default</span><span class="o">:</span>
+<span class="w">      </span><span class="k">break</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">17. What happens once, at power-on</h3>
+        <p class="code-block-group__desc">setup() runs a single time when the device is switched on. It opens a Serial connection for debugging over USB (separate from the sensors' own SoftwareSerial connections), tells both SoftwareSerial objects to start listening at 9600 baud, and sets both buzzer pins to OUTPUT mode with an explicit LOW so neither buzzer makes a sound before the main logic takes over.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span></pre></div></td><td class="code"><div><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
+<span class="w">  </span><span class="n">leftSensor</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="n">SENSOR_BAUD</span><span class="p">);</span>
+<span class="w">  </span><span class="n">rightSensor</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="n">SENSOR_BAUD</span><span class="p">);</span>
+
+<span class="w">  </span><span class="n">pinMode</span><span class="p">(</span><span class="n">leftBuzzer</span><span class="p">,</span><span class="w"> </span><span class="n">OUTPUT</span><span class="p">);</span>
+<span class="w">  </span><span class="n">pinMode</span><span class="p">(</span><span class="n">rightBuzzer</span><span class="p">,</span><span class="w"> </span><span class="n">OUTPUT</span><span class="p">);</span>
+<span class="w">  </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">leftBuzzer</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="w">  </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">rightBuzzer</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+
+<span class="w">  </span><span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;VIsensor ready - zone-based beep pattern - sensors must already be set to 9600 baud.&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+      <article class="code-block-group reveal">
+        <h3 class="code-block-group__title">18. What happens continuously, forever</h3>
+        <p class="code-block-group__desc">This is the whole system in five lines. Read the left sensor, then the right sensor. Check whether either one, on its own, is currently reading something in the CLOSE zone. Update each buzzer's state — passing each one both its own sensor's distance and whether the OTHER side is close, exactly the input updateBuzzerZone() needs for the escalation logic in section 11. Then print both readings over Serial for debugging while testing the device. Then it all repeats, as fast as the Arduino can loop.</p>
+        <div class="codeblock"><table class="codeblocktable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span></pre></div></td><td class="code"><div><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">leftDist</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">readDistance</span><span class="p">(</span><span class="n">leftSensor</span><span class="p">);</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">rightDist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">readDistance</span><span class="p">(</span><span class="n">rightSensor</span><span class="p">);</span>
+
+<span class="w">  </span><span class="kt">bool</span><span class="w"> </span><span class="n">leftIsClose</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">classifyZone</span><span class="p">(</span><span class="n">leftDist</span><span class="p">)</span><span class="w">  </span><span class="o">==</span><span class="w"> </span><span class="n">ZONE_CLOSE</span><span class="p">);</span>
+<span class="w">  </span><span class="kt">bool</span><span class="w"> </span><span class="n">rightIsClose</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">classifyZone</span><span class="p">(</span><span class="n">rightDist</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">ZONE_CLOSE</span><span class="p">);</span>
+
+<span class="w">  </span><span class="n">updateBuzzerZone</span><span class="p">(</span><span class="n">left</span><span class="p">,</span><span class="w">  </span><span class="n">leftDist</span><span class="p">,</span><span class="w">  </span><span class="n">rightIsClose</span><span class="p">);</span>
+<span class="w">  </span><span class="n">updateBuzzerZone</span><span class="p">(</span><span class="n">right</span><span class="p">,</span><span class="w"> </span><span class="n">rightDist</span><span class="p">,</span><span class="w"> </span><span class="n">leftIsClose</span><span class="p">);</span>
+
+<span class="w">  </span><span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;L:&quot;</span><span class="p">);</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">leftDist</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">-1</span><span class="p">)</span><span class="w"> </span><span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;--&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="n">leftDist</span><span class="p">);</span>
+<span class="w">  </span><span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;cm  R:&quot;</span><span class="p">);</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">rightDist</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">-1</span><span class="p">)</span><span class="w"> </span><span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;--&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="n">rightDist</span><span class="p">);</span>
+<span class="w">  </span><span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;cm&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div></td></tr></table></div>
+
+      </article>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p class="site-footer__brand">Proximity Alert Wearable for Obstacle Detection</p>
+    <p class="site-footer__tagline">An educational showcase of this proximity alert wearable.</p>
+    <a class="backtotop" href="#top">Back to top</a>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
